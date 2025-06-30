@@ -1,10 +1,8 @@
-"""The entry point for grader when run as a standalone script
-(rather than a pytest plugin).
-"""
+"""Command line interface for pytest-grader."""
 
 import sys
 from pathlib import Path
-from lock_tests import lock_doctests_for_file
+from .lock_tests import lock_doctests_for_file
 
 def lock_command(args):
     """Copy [src] to [dst], replacing the output of locked doctests with secure hashes."""
@@ -32,7 +30,8 @@ def show_help():
     print("\nOptions:")
     print("  --help, -h Show this help message")
 
-def main():
+def cli_main():
+    """Main CLI entry point."""
     if len(sys.argv) < 2:
         show_help()
         sys.exit(1)
@@ -48,6 +47,3 @@ def main():
         print(f"Unknown command: {command}")
         print(f"Available commands: {', '.join(COMMANDS.keys())}")
         sys.exit(1)
-
-if __name__ == '__main__':
-    main()

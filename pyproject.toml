@@ -10,7 +10,7 @@ dependencies = [
 classifiers = ["Framework :: Pytest"]
 
 [project.scripts]
-pytest-grader = "main:main"
+pytest-grader = "pytest_grader:main"
 
 [tool.setuptools]
-py-modules = ["pytest_grader"]
+packages = ["pytest_grader"]

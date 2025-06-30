@@ -2,7 +2,7 @@ import subprocess
 import tempfile
 import os
 from pathlib import Path
-from lock_tests import replace_doctest_outputs
+from pytest_grader.lock_tests import replace_doctest_outputs
 
 
 def test_replace_doctest_outputs():
@@ -122,7 +122,7 @@ def test_replace_doctest_outputs():
 
 
 def test_lock_command_output():
-    """Test that main.py lock command generates expected output file."""
+    """Test that pytest-grader lock command generates expected output file."""
     # Create a temporary directory for the test
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_dir_path = Path(temp_dir)
@@ -130,7 +130,7 @@ def test_lock_command_output():
         # Copy the source file to temp directory
         src_file = temp_dir_path / "lock.py"
         dst_file = temp_dir_path / "locked.py"
-        examples_dir = Path(__file__).parent / "examples"
+        examples_dir = Path(__file__).parent.parent / "examples"
         expected_file = examples_dir / "locked_expected.py"
 
         # Copy the original lock.py to our temp directory
@@ -141,9 +141,9 @@ def test_lock_command_output():
 
         # Run the lock command
         result = subprocess.run([
-            "python3", "main.py", "lock",
+            "pytest-grader", "lock",
             str(src_file), str(dst_file)
-        ], capture_output=True, text=True, cwd=Path(__file__).parent)
+        ], capture_output=True, text=True, cwd=Path(__file__).parent.parent)
 
         # Check that the command succeeded
         assert result.returncode == 0, f"Lock command failed with error: {result.stderr}"

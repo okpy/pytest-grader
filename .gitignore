@@ -1,0 +1,15 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Packaging
+.venv
+uv.lock
+
+# Generated test files
+examples/locked.py
+
