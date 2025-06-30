@@ -22,18 +22,27 @@ COMMANDS = {
     "lock": lock_command
 }
 
+def show_help():
+    """Show help message with usage and available commands."""
+    print("Usage: pytest-grader <command>")
+    print("\nAvailable commands:")
+    for cmd, func in COMMANDS.items():
+        description = func.__doc__ or ""
+        print(f"  {cmd:<10} {description}")
+    print("\nOptions:")
+    print("  --help, -h Show this help message")
+
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python main.py <command>")
-        print("\nAvailable commands:")
-        for cmd, func in COMMANDS.items():
-            description = func.__doc__ or ""
-            print(f"  {cmd:<10} {description}")
+        show_help()
         sys.exit(1)
 
     command = sys.argv[1]
 
-    if command in COMMANDS:
+    if command in ["--help", "-h", "help"]:
+        show_help()
+        sys.exit(0)
+    elif command in COMMANDS:
         COMMANDS[command](sys.argv)
     else:
         print(f"Unknown command: {command}")

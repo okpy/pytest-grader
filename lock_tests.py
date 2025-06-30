@@ -36,15 +36,20 @@ def lock_doctests_for_file(src: Path, dst: Path) -> None:
             # Extract the original docstring from the source code to preserve formatting
             func_pattern = rf'def {re.escape(name)}\([^)]*\):\s*"""([^"]*(?:"[^"]*"[^"]*)*)"""'
             match = re.search(func_pattern, source_code, flags=re.DOTALL)
-            
+
             if match:
                 original_docstring = match.group(1)
                 # Process the original docstring while preserving its formatting
                 modified_docstring = replace_doctest_outputs(original_docstring, name)
-                
+
                 # Replace the docstring in the source code
-                modified_code = modified_code.replace(match.group(0), 
+                modified_code = modified_code.replace(match.group(0),
                                                      match.group(0).replace(original_docstring, modified_docstring))
+
+    # Remove @lock decorator lines and clean up extra blank lines
+    modified_code = re.sub(r'^@lock\s*\n', '', modified_code, flags=re.MULTILINE)
+    # Clean up multiple consecutive blank lines
+    modified_code = re.sub(r'\n\n\n+', '\n\n', modified_code)
 
     # Write the modified code to the destination
     with open(dst, 'w') as f:
@@ -52,9 +57,7 @@ def lock_doctests_for_file(src: Path, dst: Path) -> None:
 
 
 def replace_doctest_outputs(docstring: str, func_name: str) -> str:
-    """
-    Replace doctest outputs in a docstring with hash codes.
-    """
+    """Replace doctest outputs in a docstring with hash codes."""
     lines = docstring.split('\n')
     result_lines = []
     i = 0
@@ -66,12 +69,16 @@ def replace_doctest_outputs(docstring: str, func_name: str) -> str:
         # Check if this line is a doctest command
         if line.strip().startswith('>>> '):
             i += 1
-            # Look for the next line(s) that contain the expected output
+            # Skip any continuation lines (...)
+            while i < len(lines) and lines[i].strip().startswith('... '):
+                result_lines.append(lines[i])
+                i += 1
+            
+            # Now look for the expected output lines
             while i < len(lines):
                 next_line = lines[i]
-                # If we hit another >>> or empty line or ... continuation, stop
+                # If we hit another >>> or empty line, stop
                 if (next_line.strip().startswith('>>> ') or
-                    next_line.strip().startswith('... ') or
                     not next_line.strip()):
                     break
 
@@ -81,7 +88,7 @@ def replace_doctest_outputs(docstring: str, func_name: str) -> str:
                     hash_code = hashlib.sha256(hash_input.encode()).hexdigest()[:16]
                     # Preserve the indentation
                     indent = len(next_line) - len(next_line.lstrip())
-                    result_lines.append(' ' * indent + f"'{hash_code}'")
+                    result_lines.append(' ' * indent + f"LOCKED: {hash_code}")
                 else:
                     result_lines.append(next_line)
                 i += 1

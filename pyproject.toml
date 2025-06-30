@@ -9,8 +9,8 @@ dependencies = [
 ]
 classifiers = ["Framework :: Pytest"]
 
+[project.scripts]
+pytest-grader = "main:main"
+
 [tool.setuptools]
 py-modules = ["pytest_grader"]
-
-[project.scripts]
-build = "build:create_executable_zip"
