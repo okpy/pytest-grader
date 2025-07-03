@@ -1,0 +1,10 @@
+found locked tests
+
+=== Unlocking Tests ===
+
+At each "? ", type what you would expect the output to be to unlock the test.
+
+Type FUNCTION for any function value.  Type exit() to stop unlocking tests.
+
+You can also type questions or requests, which will be answered automatically.
+For example: "Explain this expression" or "what's the value of x."

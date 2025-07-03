@@ -10,6 +10,11 @@ wheels/
 .venv
 uv.lock
 
+# Configuration & editing
+.vscode
+.python-version
+*.swp
+
 # Generated test files
 examples/locked.py
 
