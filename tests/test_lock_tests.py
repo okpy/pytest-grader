@@ -29,7 +29,7 @@ def test_replace_doctest_outputs():
     10
     '''
 
-    result = replace_doctest_outputs(docstring, "test_func")
+    result = replace_doctest_outputs("test_file.py", docstring, "test_func")
 
     # Systematically check all doctests and their outputs
     original_lines = docstring.split('\n')
@@ -159,3 +159,54 @@ def test_lock_command_output():
 
         # Compare the content
         assert generated_content == expected_content, f"Generated content does not match expected.\nGenerated:\n{generated_content}\nExpected:\n{expected_content}"
+
+
+def test_lock_unlock_roundtrip():
+    """Test that locking and unlocking works correctly in a round-trip."""
+    import doctest
+    from pytest_grader.lock_tests import replace_doctest_outputs, OutputPosition
+    
+    # Test data
+    filename = "test.py"
+    func_name = "test_func"
+    original_docstring = '''
+    >>> square(10)
+    100
+    >>> add(2, 3)
+    5
+    >>> print("hello")
+    hello
+    '''
+    
+    # Step 1: Lock the docstring
+    locked_docstring = replace_doctest_outputs(filename, original_docstring, func_name)
+    
+    # Step 2: Extract the locked hashes
+    locked_lines = locked_docstring.split('\n')
+    locked_hashes = []
+    for line in locked_lines:
+        if 'LOCKED:' in line:
+            hash_code = line.split('LOCKED:')[1].strip()
+            locked_hashes.append(hash_code)
+    
+    # Should have 3 locked outputs
+    assert len(locked_hashes) == 3, f"Expected 3 locked hashes, got {len(locked_hashes)}"
+    
+    # Step 3: Test unlocking with correct answers
+    test_cases = [
+        (0, "100"),    # First output: square(10) -> 100
+        (1, "5"),      # Second output: add(2, 3) -> 5  
+        (2, "hello"),  # Third output: print("hello") -> hello
+    ]
+    
+    for output_number, correct_answer in test_cases:
+        pos = OutputPosition(filename=filename, test_name=func_name, output_number=output_number)
+        expected_hash = pos.encode(correct_answer)
+        actual_hash = locked_hashes[output_number]
+        
+        assert expected_hash == actual_hash, f"Round-trip failed for output {output_number}: expected hash {expected_hash}, got {actual_hash} for answer '{correct_answer}'"
+    
+    # Step 4: Test that wrong answers don't match
+    wrong_pos = OutputPosition(filename=filename, test_name=func_name, output_number=0)
+    wrong_hash = wrong_pos.encode("999")  # Wrong answer for square(10)
+    assert wrong_hash != locked_hashes[0], "Wrong answer should not match the locked hash"

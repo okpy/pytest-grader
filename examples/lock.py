@@ -7,7 +7,8 @@ def square(x):
 @points(1)
 def square_doctest():
     """
-    >>> square(10)
+    >>> x = 10
+    >>> square(x)
     100
     >>> print(print(10),
     ...       square(10))

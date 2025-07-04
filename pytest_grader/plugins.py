@@ -1,6 +1,6 @@
 import pytest
 
-from .unlock_tests import *
+from .lock_tests import *
 
 
 def has_points(item: pytest.Item):
