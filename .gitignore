@@ -15,6 +15,7 @@ uv.lock
 .python-version
 *.swp
 
-# Generated test files
+# Generated files
 examples/locked.py
+examples/grader.sqlite
 
