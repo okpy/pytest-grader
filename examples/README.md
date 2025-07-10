@@ -27,6 +27,8 @@ Run these commands to try out the test locking feature:
 
 `pytest --doctest-modules --unlock locked.py`
 
+Unlocking progress is saved in `grader.sqlite`. Remove that file to start again.
+
 ## TODO Progress Logging
 
 ## TODO AI Assistance

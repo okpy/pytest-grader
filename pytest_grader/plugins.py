@@ -103,9 +103,10 @@ class UnlockPlugin:
 
     def pytest_runtest_setup(self, item):
         if isinstance(item, pytest.DoctestItem) and isinstance(item.dtest, doctest.DocTest):
+            all_unlocked = True
             for example in item.dtest.examples:
                 if 'LOCKED:' in example.want:
-                    all_unlocked = self._unlock_doctest_output(example)
+                    all_unlocked = all_unlocked and self._unlock_doctest_output(example)
 
             if not all_unlocked:
                 test_name = item.dtest.name.split('.')[-1] if hasattr(item.dtest, 'name') else str(item)

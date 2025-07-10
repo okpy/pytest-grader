@@ -1,49 +1,30 @@
 """Command line interface for pytest-grader."""
 
-import sys
+import argparse
 from pathlib import Path
 from .lock_tests import lock_doctests_for_file
 
 def lock_command(args):
     """Copy [src] to [dst], replacing the output of locked doctests with secure hashes."""
-    if len(args) != 4:
-        print("Usage: python main.py lock <src> <dst>")
-        sys.exit(1)
-
-    src = args[2]
-    dst = args[3]
-
-    lock_doctests_for_file(Path(src), Path(dst))
-    print(f"Wrote locked version of {src} to {dst}")
+    lock_doctests_for_file(Path(args.src), Path(args.dst))
+    print(f'Wrote locked version of {args.src} to {args.dst}')
 
 COMMANDS = {
-    "lock": lock_command
+    'lock': lock_command,
 }
-
-def show_help():
-    """Show help message with usage and available commands."""
-    print("Usage: pytest-grader <command>")
-    print("\nAvailable commands:")
-    for cmd, func in COMMANDS.items():
-        description = func.__doc__ or ""
-        print(f"  {cmd:<10} {description}")
-    print("\nOptions:")
-    print("  --help, -h Show this help message")
 
 def cli_main():
     """Main CLI entry point."""
-    if len(sys.argv) < 2:
-        show_help()
-        sys.exit(1)
+    parser = argparse.ArgumentParser(prog='pytest-grader')
+    subparsers = parser.add_subparsers(dest='command')
 
-    command = sys.argv[1]
+    lock_parser = subparsers.add_parser('lock', help=lock_command.__doc__)
+    lock_parser.add_argument('src', help='Source file')
+    lock_parser.add_argument('dst', help='Destination file')
 
-    if command in ["--help", "-h", "help"]:
-        show_help()
-        sys.exit(0)
-    elif command in COMMANDS:
-        COMMANDS[command](sys.argv)
+    args = parser.parse_args()
+
+    if args.command in COMMANDS:
+        COMMANDS[args.command](args)
     else:
-        print(f"Unknown command: {command}")
-        print(f"Available commands: {', '.join(COMMANDS.keys())}")
-        sys.exit(1)
+        parser.print_help()
