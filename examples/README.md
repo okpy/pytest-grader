@@ -19,11 +19,11 @@ Run these commands to try out the test locking feature:
 
 `pytest-grader lock lock.py locked.py`
 
-(3) Confirm that tests in `locked.py` fail
+(3) Confirm that tests in `locked.py` are skipped because they are locked.
 
 `pytest --doctest-modules locked.py`
 
-(4) Interactively unlock the tests and then confirm that they pass
+(4) Interactively unlock the tests and then confirm that they pass.
 
 `pytest --doctest-modules --unlock locked.py`
 
