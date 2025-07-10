@@ -4,23 +4,29 @@
 
 Run these commands to try out the score reporting feature:
 
-`pytest --score partial_credit.py`
-`pytest --score full_credit.py`
+- `pytest --score partial_credit.py`
+- `pytest --score full_credit.py`
 
 ## Locked Doctests
 
 Run these commands to try out the test locking feature:
 
 (1) Confirm that tests in `lock.py` pass
+
 `pytest --doctest-modules lock.py`
 
 (2) Generate a locked test file.
+
 `pytest-grader lock lock.py locked.py`
 
 (3) Confirm that tests in `locked.py` fail
+
 `pytest --doctest-modules locked.py`
 
 (4) Interactively unlock the tests and then confirm that they pass
+
 `pytest --doctest-modules --unlock locked.py`
 
-## TODO AI assistance
+## TODO Progress Logging
+
+## TODO AI Assistance
