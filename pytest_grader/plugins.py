@@ -91,7 +91,15 @@ class UnlockPlugin:
 
     def pytest_collection_modifyitems(self, session, config, items):
         if self.unlock_mode:
-            run_unlock_interactive(items, self.keys)
+            # Temporarily disable pytest's output capturing for interactive input
+            capmanager = config.pluginmanager.getplugin('capturemanager')
+            if capmanager:
+                capmanager.suspend_global_capture(in_=True)
+            try:
+                run_unlock_interactive(items, self.keys)
+            finally:
+                if capmanager:
+                    capmanager.resume_global_capture()
 
     def pytest_runtest_setup(self, item):
         if isinstance(item, pytest.DoctestItem) and isinstance(item.dtest, doctest.DocTest):
@@ -101,7 +109,7 @@ class UnlockPlugin:
 
             if not all_unlocked:
                 test_name = item.dtest.name.split('.')[-1] if hasattr(item.dtest, 'name') else str(item)
-                lock_warning = f"Test {test_name} still has locked examples. To unlock them, run pytest with --unlock."
+                lock_warning = f"{test_name} still has locked examples. To unlock them, run pytest with --unlock."
                 print(lock_warning)
                 pytest.skip(lock_warning)
 
