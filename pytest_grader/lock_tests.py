@@ -37,7 +37,7 @@ def lock_doctests_for_file(src: Path, dst: Path) -> None:
             obj.__doc__):
 
             # Extract the original docstring from the source code to preserve formatting
-            func_pattern = rf'def {re.escape(name)}\([^)]*\):\s*"""([^"]*(?:"[^"]*"[^"]*)*)"""'
+            func_pattern = rf'def {re.escape(name)}\([^)]*\):\s*"""(.*?)"""'
             match = re.search(func_pattern, source_code, flags=re.DOTALL)
 
             if match:
@@ -146,6 +146,7 @@ def unlock_doctest(dtest: doctest.DocTest, keys: dict[str, str]):
                         return False
                     keys[hash_code] = output_str
             output_number += 1
+    return True
 
 
 def unlock_output(output_pos, hash_code, prompt):

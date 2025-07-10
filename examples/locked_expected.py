@@ -4,6 +4,14 @@ def square(x):
     return x*x
 
 @points(1)
+def times_doctest():
+    """
+    >>> x = 10
+    >>> x * 2
+    LOCKED: 0d52c4403dff3e24
+    """
+
+@points(1)
 def square_doctest():
     """
     >>> x = 10

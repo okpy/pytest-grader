@@ -5,6 +5,15 @@ def square(x):
 
 @lock
 @points(1)
+def times_doctest():
+    """
+    >>> x = 10
+    >>> x * 2
+    20
+    """
+
+@lock
+@points(1)
 def square_doctest():
     """
     >>> x = 10
