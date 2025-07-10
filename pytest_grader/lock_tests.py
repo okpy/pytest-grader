@@ -118,7 +118,8 @@ def run_unlock_interactive(items: list[pytest.Item], keys: dict[str, str]):
     for item in items:
         if isinstance(item, pytest.DoctestItem) and isinstance(item.dtest, doctest.DocTest):
             if any("LOCKED:" in example.want for example in item.dtest.examples):
-                if not unlock_doctest(item.dtest, keys):
+                success = unlock_doctest(item.dtest, keys)
+                if not success:
                     return
     print("=== 🎉 All tests unlocked! 🎉 ===")
 
@@ -133,23 +134,23 @@ def unlock_doctest(dtest: doctest.DocTest, keys: dict[str, str]):
         output_lines = [s for s in example.want.split('\n') if s.strip()]
         for k, line in enumerate(output_lines):
             if line.strip().startswith('LOCKED:'):
-                hash_code = line.split('LOCKED:')[1].strip()
-                if output := keys.get(hash_code):
+                expected_hash = line.split('LOCKED:')[1].strip()
+                if output := keys.get(expected_hash):
                     print(output)
                 else:
                     position = OutputPosition(testname, output_number)
                     prompt = "?"
                     if len(output_lines) > 1:
                         prompt = f"(line {k+1} of {len(output_lines)}) ?"
-                    output_str = unlock_output(position, hash_code, prompt)
+                    output_str = unlock_output(example, position, expected_hash, prompt)
                     if not output_str:  # User chose to exit
                         return False
-                    keys[hash_code] = output_str
+                    keys[expected_hash] = output_str
             output_number += 1
     return True
 
 
-def unlock_output(output_pos, hash_code, prompt):
+def unlock_output(example, output_pos, expected_hash, prompt):
     """Interactively unlock a single output."""
     while True:
         try:
@@ -160,12 +161,17 @@ def unlock_output(output_pos, hash_code, prompt):
                 return None
 
             # Check if the input matches the hash
-            expected_hash = output_pos.encode(user_input)
-            if expected_hash == hash_code:
+            input_hash = output_pos.encode(user_input)
+            if input_hash == expected_hash:
                 return user_input
             else:
-                print("-- Not quite. Try again! --")
+                respond_to_incorrect_input(example, output_pos, user_input)
                 print()
         except (EOFError, KeyboardInterrupt):
             print("\nExiting unlock mode.")
             return False
+
+
+def respond_to_incorrect_input(example, output_pos, user_input):
+    print("-- Not quite. Try again! --")
+
