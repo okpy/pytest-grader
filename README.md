@@ -11,7 +11,9 @@ A pytest plugin for testing and scoring programming assignments.
   - Lock doctests using the `@lock` decorator.
   - `python3 pytest-grader --lock [src] [dest]` will generate a copy of src with doctests locked.
   - `pytest --unlock` provides an interactive interface for unlocking locked doctests.
-- **Coming soon: Progress Logging**
+- **Progress Logging**
+  - Snapshots of assignment files, test case results, and unlocking attempts are stored in a `grader.sqlite`.
+  - This file is designed to be submitted along with the assignment as a record of how the assignment was completed.
 - **Coming soon: AI assistance**
 
 ## Usage
