@@ -7,7 +7,7 @@ A pytest plugin for testing and scoring programming assignments.
 - **Assignment Scoring**
   - Add point values to test functions using the `@points(n)` decorator
   - Show a score summary when running `pytest --score`
-- **Test Locking** as described in Basu et al., *Problems Before Solutions: Automated Problem Clarification at Scale* [abstract](https://dl.acm.org/doi/10.1145/2724660.2724679) [pdf](http://denero.org/content/pubs/las15_basu_unlocking.pdf)
+- **Test Locking** as described in Basu et al., *Automated Problem Clarification at Scale* ([abstract](https://dl.acm.org/doi/10.1145/2724660.2724679) [pdf](http://denero.org/content/pubs/las15_basu_unlocking.pdf))
   - Lock doctests using the `@lock` decorator.
   - `python3 pytest-grader --lock [src] [dest]` will generate a copy of src with doctests locked.
   - `pytest --unlock` provides an interactive interface for unlocking locked doctests.
