@@ -1,6 +1,8 @@
 import pytest
+import yaml
 
 from .lock_tests import *
+from .logger import ProgressLogger, SQLLogger
 from sqlitedict import SqliteDict
 
 GRADER_DB = 'grader.sqlite'
@@ -82,9 +84,10 @@ class ScorerPlugin:
 
 
 class UnlockPlugin:
-    def __init__(self, keys: dict[str, str]):
+    def __init__(self, keys: dict[str, str], logger: ProgressLogger | None = None):
         self.unlock_mode = False
         self.keys = keys
+        self.logger = logger
 
     def pytest_configure(self, config):
         self.unlock_mode = config.getoption("--unlock")
@@ -96,7 +99,7 @@ class UnlockPlugin:
             if capmanager:
                 capmanager.suspend_global_capture(in_=True)
             try:
-                run_unlock_interactive(items, self.keys)
+                run_unlock_interactive(items, self.keys, self.logger)
             finally:
                 if capmanager:
                     capmanager.resume_global_capture()
@@ -136,6 +139,23 @@ class UnlockPlugin:
         return all_unlocked
 
 
+class LoggerPlugin:
+    def __init__(self, logger: ProgressLogger):
+        self.logger = logger
+
+    def pytest_configure(self, config):
+        # Take a snapshot of the code early, before any unlocking happens
+        self.logger.snapshot()
+
+    def pytest_runtest_logreport(self, report):
+        # Log test cases when they complete (call phase)
+        if report.when == "call":
+            test_name = report.nodeid.split("::")[-1]
+            passed = report.outcome == "passed"
+            response = None  # Could be enhanced to capture output/errors
+            self.logger.test_case(test_name, passed, response)
+
+
 def pytest_addoption(parser):
     parser.addoption(
         "--score", "-S", action="store_true", default=False,
@@ -152,5 +172,11 @@ def pytest_configure(config):
     config.option.reportchars = 'rs'
 
     unlock_keys = SqliteDict(GRADER_DB, tablename="unlock_keys", autocommit=True)
+
+    with open('grader.yaml', 'r') as f:
+        grader_config = yaml.safe_load(f)
+
+    logger = SQLLogger(GRADER_DB, grader_config)
     config.pluginmanager.register(ScorerPlugin(), "pytest-grader-scorer")
-    config.pluginmanager.register(UnlockPlugin(unlock_keys), "pytest-grader-unlock")
+    config.pluginmanager.register(UnlockPlugin(unlock_keys, logger), "pytest-grader-unlock")
+    config.pluginmanager.register(LoggerPlugin(logger), "pytest-grader-logger")

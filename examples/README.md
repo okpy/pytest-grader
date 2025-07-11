@@ -29,6 +29,11 @@ Run these commands to try out the test locking feature:
 
 Unlocking progress is saved in `grader.sqlite`. Remove that file to start again.
 
-## TODO Progress Logging
+## Progress Logging
+
+All of the commands above will log progress to `grader.sqlite`. You can inspect
+the contents with:
+
+`sqlite3 grader.sqlite .dump`
 
 ## TODO AI Assistance
