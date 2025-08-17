@@ -19,6 +19,7 @@ def has_points(item: pytest.Item):
             return hasattr(func, 'points') and func.points > 0
     return False
 
+
 def get_points(item: pytest.Item):
     if isinstance(item, pytest.Function):
         return item.function.points
@@ -165,18 +166,32 @@ def pytest_addoption(parser):
         "--unlock", "-U", action="store_true", default=False,
         help="Unlock locked doctests interactively"
     )
+    parser.addoption(
+        "--grader-db", action="store", default="grader.sqlite",
+        help="Grader database file (default: grader.sqlite)"
+    )
 
 
 def pytest_configure(config):
     # Ensure that skipped tests display a reason
     config.option.reportchars = 'rs'
 
-    unlock_keys = SqliteDict(GRADER_DB, tablename="unlock_keys", autocommit=True)
+    # Read assignment configuration
+    assignment_file = config.getoption("--assignment")
+    with open(assignment_file, 'r') as f:
+        assignment_conf = yaml.safe_load(f)
+    grader_db = config.getoption("--grader-db")
 
-    with open('grader.yaml', 'r') as f:
-        grader_config = yaml.safe_load(f)
+    # Store configuration in grader_db
+    conf = SqliteDict(grader_db, tablename="conf", autocommit=True)
+    for k, v in assignment_conf.items():
+        conf[k] = v
 
-    logger = SQLLogger(GRADER_DB, grader_config)
+    # Create shared services
+    logger = SQLLogger(grader_db, conf)
+    unlock_keys = SqliteDict(grader_db, tablename="unlock_keys", autocommit=True)
+
+    # Register plugins
     config.pluginmanager.register(ScorerPlugin(), "pytest-grader-scorer")
     config.pluginmanager.register(UnlockPlugin(unlock_keys, logger), "pytest-grader-unlock")
     config.pluginmanager.register(LoggerPlugin(logger), "pytest-grader-logger")

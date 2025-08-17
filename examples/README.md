@@ -36,4 +36,6 @@ the contents with:
 
 `sqlite3 grader.sqlite .dump`
 
-## TODO AI Assistance
+## Full assignments
+
+(Coming soon) See the `cs61a` directory for example assignments that use `pytest-grader`.

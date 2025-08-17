@@ -1,3 +1,7 @@
+"""
+Logging that tracks a student's progress through an assignment.
+"""
+
 from abc import ABC, abstractmethod
 import sqlite3
 import hashlib
@@ -22,9 +26,9 @@ class ProgressLogger(ABC):
 
 
 class SQLLogger(ProgressLogger):
-    def __init__(self, db, assignment_info):
+    def __init__(self, db: str, conf: dict[str, str]):
         self.db_path = db
-        self.assignment_info = assignment_info
+        self.conf = conf
         self.current_snapshot = None
         self.conn = sqlite3.connect(self.db_path)
         self.cursor = self.conn.cursor()
@@ -104,7 +108,7 @@ class SQLLogger(ProgressLogger):
         self.current_snapshot = snapshot_id
 
         # Process each included file
-        for filename in self.assignment_info.get('included_files', []):
+        for filename in self.conf.get('included_files', []):
             if os.path.exists(filename):
                 with open(filename, 'r', encoding='utf-8') as f:
                     content = f.read()
