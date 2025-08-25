@@ -13,6 +13,20 @@ import re
 import types
 
 
+UNLOCK_PREAMBLE = """found locked tests
+
+=== Unlocking Tests ===
+
+At each "? ", type what you would expect the output to be to unlock the test.
+
+Type FUNCTION for any function value.  Type exit() to stop unlocking tests.
+
+You can also type questions or requests, which will be answered automatically.
+For example: "Explain this expression" or "what's the value of x."
+
+"""
+
+
 def lock_doctests_for_file(src: Path, dst: Path) -> None:
     """
     Write the contents of src to dst with one change: all of the outputs for
@@ -112,9 +126,7 @@ class OutputPosition:
 
 def run_unlock_interactive(items: list[pytest.Item], keys: dict[str, str], logger=None):
     """Collect all LOCKED outputs of doctests among Pytest test items."""
-    preamble = Path(__file__).parent / "unlock_interface.txt"
-    with open(preamble, 'r') as f:
-        print(f.read())
+    print(UNLOCK_PREAMBLE)
     for item in items:
         if isinstance(item, pytest.DoctestItem) and isinstance(item.dtest, doctest.DocTest):
             if any("LOCKED:" in example.want for example in item.dtest.examples):

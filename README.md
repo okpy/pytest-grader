@@ -24,3 +24,9 @@ See the `examples` directory for more usage info.
 ## License
 
 A permissive license will be chosen shortly...
+
+## Updating versions
+
+- Change version in `pyproject.toml`
+- `python -m build`
+- `python -m twine upload dist/*`
