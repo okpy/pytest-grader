@@ -234,3 +234,89 @@ def another_function_with_doctests():
         
         assert "LOCKED:" in locked_content, "Locked content should contain LOCKED hashes"
         assert "# LOCK" not in locked_content, "LOCK comments should be removed"
+
+
+def test_selective_function_locking():
+    """Test that only functions with # LOCK annotation are locked, not all functions."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_dir_path = Path(temp_dir)
+        src_file = temp_dir_path / "test_selective.py"
+        dst_file = temp_dir_path / "test_selective_locked.py"
+        
+        # Create a file with one locked function and one unlocked function
+        test_content = '''# LOCK
+def locked_function():
+    """This function should be locked.
+    
+    >>> locked_function()
+    42
+    """
+    return 42
+
+def unlocked_function():
+    """This function should NOT be locked.
+    
+    >>> unlocked_function()
+    123
+    """
+    return 123
+'''
+        
+        with open(src_file, "w") as f:
+            f.write(test_content)
+        
+        # Lock the file
+        lock_doctests_for_file(src_file, dst_file)
+        
+        # Check that the output file was created
+        assert dst_file.exists(), "Output file was not created"
+        
+        # Read the locked content
+        with open(dst_file, "r") as f:
+            locked_content = f.read()
+        
+        # Verify that only the locked function's doctests are replaced with hashes
+        lines = locked_content.split('\n')
+        
+        # Find the locked function section
+        locked_function_found = False
+        unlocked_function_found = False
+        locked_function_has_locked_output = False
+        unlocked_function_has_locked_output = False
+        
+        for i, line in enumerate(lines):
+            if 'def locked_function():' in line:
+                locked_function_found = True
+                # Look ahead for LOCKED: in this function's docstring
+                for j in range(i, min(i + 10, len(lines))):
+                    if 'LOCKED:' in lines[j]:
+                        locked_function_has_locked_output = True
+                        break
+            elif 'def unlocked_function():' in line:
+                unlocked_function_found = True
+                # Look ahead for LOCKED: in this function's docstring (should not exist)
+                for j in range(i, min(i + 10, len(lines))):
+                    if 'LOCKED:' in lines[j]:
+                        unlocked_function_has_locked_output = True
+                        break
+                    # But should still have the original doctest output
+                    if '123' in lines[j] and 'LOCKED:' not in lines[j]:
+                        # This is the original output, which is what we want
+                        pass
+        
+        assert locked_function_found, "locked_function should be found in output"
+        assert unlocked_function_found, "unlocked_function should be found in output"
+        assert locked_function_has_locked_output, "locked_function should have LOCKED: output"
+        assert not unlocked_function_has_locked_output, "unlocked_function should NOT have LOCKED: output"
+        
+        # Also verify the original doctest output is preserved for unlocked function
+        assert '123' in locked_content, "Original output '123' should be preserved in unlocked function"
+        
+        # Verify that the locked function's output was replaced (should not have a standalone '42' line)
+        lines = locked_content.split('\n')
+        standalone_42_found = False
+        for line in lines:
+            if line.strip() == '42':  # Standalone '42' without LOCKED:
+                standalone_42_found = True
+                break
+        assert not standalone_42_found, "Original output '42' should be replaced with LOCKED: in locked function"

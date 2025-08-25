@@ -46,9 +46,9 @@ def lock_doctests_for_file(src: Path, dst: Path) -> None:
     # Find functions that have # LOCK comment before them
     for name, obj in vars(module).items():
         if isinstance(obj, types.FunctionType):
-            # Check if there's a # LOCK comment before this function in the source
-            func_pattern = rf'# LOCK\s*\n.*?def {re.escape(name)}\('
-            if re.search(func_pattern, source_code, flags=re.DOTALL):
+            # Check if there's a # LOCK comment immediately before this function
+            func_pattern = rf'# LOCK\s*\ndef {re.escape(name)}\('
+            if re.search(func_pattern, source_code):
 
                 # Validate that locked function has doctests
                 _validate_locked_function_doctests(obj, name)
