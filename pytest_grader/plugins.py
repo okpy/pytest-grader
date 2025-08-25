@@ -170,6 +170,10 @@ def pytest_addoption(parser):
         "--grader-db", action="store", default="grader.sqlite",
         help="Grader database file (default: grader.sqlite)"
     )
+    parser.addoption(
+        "--assignment", action="store", default="grader.yaml",
+        help="Assignment configuration file (default: grader.yaml)"
+    )
 
 
 def pytest_configure(config):
