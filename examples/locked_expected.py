@@ -1,4 +1,4 @@
-from pytest_grader import lock, points
+from pytest_grader import points
 
 def square(x):
     return x*x

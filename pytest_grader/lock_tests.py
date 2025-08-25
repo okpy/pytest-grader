@@ -43,28 +43,28 @@ def lock_doctests_for_file(src: Path, dst: Path) -> None:
 
     modified_code = source_code
 
-    # Find functions with doctests that have the lock attribute set to True
+    # Find functions with doctests that have # LOCK comment before them
     for name, obj in vars(module).items():
-        if (isinstance(obj, types.FunctionType) and
-            hasattr(obj, 'lock') and
-            obj.lock is True and
-            obj.__doc__):
+        if (isinstance(obj, types.FunctionType) and obj.__doc__):
+            # Check if there's a # LOCK comment before this function in the source
+            func_pattern = rf'# LOCK\s*\n.*?def {re.escape(name)}\('
+            if re.search(func_pattern, source_code, flags=re.DOTALL):
 
-            # Extract the original docstring from the source code to preserve formatting
-            func_pattern = rf'def {re.escape(name)}\([^)]*\):\s*"""(.*?)"""'
-            match = re.search(func_pattern, source_code, flags=re.DOTALL)
+                # Extract the original docstring from the source code to preserve formatting
+                func_pattern = rf'def {re.escape(name)}\([^)]*\):\s*"""(.*?)"""'
+                match = re.search(func_pattern, source_code, flags=re.DOTALL)
 
-            if match:
-                original_docstring = match.group(1)
-                # Process the original docstring while preserving its formatting
-                modified_docstring = replace_doctest_outputs(original_docstring, name)
+                if match:
+                    original_docstring = match.group(1)
+                    # Process the original docstring while preserving its formatting
+                    modified_docstring = replace_doctest_outputs(original_docstring, name)
 
-                # Replace the docstring in the source code
-                modified_code = modified_code.replace(match.group(0),
-                                                      match.group(0).replace(original_docstring, modified_docstring))
+                    # Replace the docstring in the source code
+                    modified_code = modified_code.replace(match.group(0),
+                                                          match.group(0).replace(original_docstring, modified_docstring))
 
-    # Remove @lock decorator lines and clean up extra blank lines
-    modified_code = re.sub(r'^@lock\s*\n', '', modified_code, flags=re.MULTILINE)
+    # Remove # LOCK comment lines and clean up extra blank lines
+    modified_code = re.sub(r'^# LOCK\s*\n', '', modified_code, flags=re.MULTILINE)
     # Clean up multiple consecutive blank lines
     modified_code = re.sub(r'\n\n\n+', '\n\n', modified_code)
 

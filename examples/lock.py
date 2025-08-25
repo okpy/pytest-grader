@@ -1,9 +1,9 @@
-from pytest_grader import lock, points
+from pytest_grader import points
 
 def square(x):
     return x*x
 
-@lock
+# LOCK
 @points(1)
 def times_doctest():
     """
@@ -12,7 +12,7 @@ def times_doctest():
     20
     """
 
-@lock
+# LOCK
 @points(1)
 def square_doctest():
     """
