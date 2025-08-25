@@ -1,8 +1,9 @@
 import doctest
 import subprocess
 import tempfile
+import pytest
 from pathlib import Path
-from pytest_grader.lock_tests import replace_doctest_outputs, OutputPosition
+from pytest_grader.lock_tests import replace_doctest_outputs, OutputPosition, lock_doctests_for_file
 from pytest_grader.plugins import UnlockPlugin
 
 def test_lock_command_output():
@@ -135,3 +136,101 @@ def test_unlock_plugin_skipping_locked_test():
     all_unlocked = plugin._unlock_doctest_output(example2)
     assert not all_unlocked, "Examples are all unlocked but should not be."
     assert example2.want == f"LOCKED: {unknown_hash}\n", f"Expected 'LOCKED: {unknown_hash}\\n', got '{example2.want}'"
+
+
+def test_lock_validation_functions_without_doctests():
+    """Test that lock_doctests_for_file validates functions have doctests."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_dir_path = Path(temp_dir)
+        src_file = temp_dir_path / "test_validation.py"
+        dst_file = temp_dir_path / "test_validation_locked.py"
+        
+        # Create a file with a locked function that has no doctests
+        test_content = '''# LOCK
+def function_without_doctests():
+    """This function has no doctests."""
+    return 42
+
+# LOCK  
+def function_with_doctests():
+    """This function has doctests.
+    
+    >>> function_with_doctests()
+    123
+    """
+    return 123
+'''
+        
+        with open(src_file, "w") as f:
+            f.write(test_content)
+        
+        # Should raise ValueError for function without doctests
+        with pytest.raises(ValueError, match="Locked function 'function_without_doctests' must have at least one doctest in its docstring"):
+            lock_doctests_for_file(src_file, dst_file)
+
+
+def test_lock_validation_functions_without_docstring():
+    """Test that lock_doctests_for_file validates functions have docstrings."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_dir_path = Path(temp_dir)
+        src_file = temp_dir_path / "test_validation.py"
+        dst_file = temp_dir_path / "test_validation_locked.py"
+        
+        # Create a file with a locked function that has no docstring
+        test_content = '''# LOCK
+def function_without_docstring():
+    return 42
+'''
+        
+        with open(src_file, "w") as f:
+            f.write(test_content)
+        
+        # Should raise ValueError for function without docstring
+        with pytest.raises(ValueError, match="Locked function 'function_without_docstring' must have a docstring with at least one doctest"):
+            lock_doctests_for_file(src_file, dst_file)
+
+
+def test_lock_validation_success_with_valid_doctests():
+    """Test that lock_doctests_for_file succeeds with valid doctests."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_dir_path = Path(temp_dir)
+        src_file = temp_dir_path / "test_validation.py"
+        dst_file = temp_dir_path / "test_validation_locked.py"
+        
+        # Create a file with valid locked functions that have doctests
+        test_content = '''# LOCK
+def function_with_doctests():
+    """This function has doctests.
+    
+    >>> function_with_doctests()
+    42
+    """
+    return 42
+
+# LOCK  
+def another_function_with_doctests():
+    """Another function with doctests.
+    
+    >>> another_function_with_doctests()
+    123
+    >>> print("test")
+    test
+    """
+    return 123
+'''
+        
+        with open(src_file, "w") as f:
+            f.write(test_content)
+        
+        # Should succeed without raising any exceptions
+        lock_doctests_for_file(src_file, dst_file)
+        
+        # Check that the output file was created
+        assert dst_file.exists(), "Output file was not created"
+        
+        # Verify the locked content contains LOCKED hashes
+        with open(dst_file, "r") as f:
+            locked_content = f.read()
+        
+        assert "LOCKED:" in locked_content, "Locked content should contain LOCKED hashes"
+        assert "# LOCK" not in locked_content, "LOCK comments should be removed"

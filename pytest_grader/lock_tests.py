@@ -43,12 +43,15 @@ def lock_doctests_for_file(src: Path, dst: Path) -> None:
 
     modified_code = source_code
 
-    # Find functions with doctests that have # LOCK comment before them
+    # Find functions that have # LOCK comment before them
     for name, obj in vars(module).items():
-        if (isinstance(obj, types.FunctionType) and obj.__doc__):
+        if isinstance(obj, types.FunctionType):
             # Check if there's a # LOCK comment before this function in the source
             func_pattern = rf'# LOCK\s*\n.*?def {re.escape(name)}\('
             if re.search(func_pattern, source_code, flags=re.DOTALL):
+
+                # Validate that locked function has doctests
+                _validate_locked_function_doctests(obj, name)
 
                 # Extract the original docstring from the source code to preserve formatting
                 func_pattern = rf'def {re.escape(name)}\([^)]*\):\s*"""(.*?)"""'
@@ -71,6 +74,24 @@ def lock_doctests_for_file(src: Path, dst: Path) -> None:
     # Write the modified code to the destination
     with open(dst, 'w') as f:
         f.write(modified_code)
+
+
+def _validate_locked_function_doctests(function, function_name):
+    """
+    Validate that a locked function has doctests.
+    Raises ValueError with appropriate error message if validation fails.
+    """
+    if not hasattr(function, '__doc__') or function.__doc__ is None:
+        raise ValueError(f"Locked function '{function_name}' must have a docstring with at least one doctest")
+
+    finder = doctest.DocTestFinder()
+    doctests = finder.find(function)
+
+    # Check if any doctest has examples
+    has_examples = any(len(dt.examples) > 0 for dt in doctests)
+    
+    if not has_examples:
+        raise ValueError(f"Locked function '{function_name}' must have at least one doctest in its docstring")
 
 
 def replace_doctest_outputs(docstring: str, func_name: str) -> str:
