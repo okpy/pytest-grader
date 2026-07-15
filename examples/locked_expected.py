@@ -3,6 +3,20 @@ from pytest_grader import points
 def square(x):
     return x*x
 
+def make_adder(n):
+    def adder(x):
+        return x + n
+    return adder
+
+@points(1)
+def adder_doctest():
+    """
+    >>> make_adder(2)
+    LOCKED: e2145f30eff4717d
+    >>> make_adder(2)(3)
+    LOCKED: 838fab643f82dcff
+    """
+
 @points(1)
 def times_doctest():
     """

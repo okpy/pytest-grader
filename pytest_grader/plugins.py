@@ -1,33 +1,24 @@
+import importlib
+import sys
+
 import pytest
 import yaml
 
-from .lock_tests import *
-from .logger import ProgressLogger, SQLLogger
+from .lock_tests import (LOCKED_PREFIX, locked_hash, replace_output,
+                         run_unlock_interactive, substitute_function_outputs)
+from .logger import SQLLogger
 from sqlitedict import SqliteDict
 
-GRADER_DB = 'grader.sqlite'
 
-
-def has_points(item: pytest.Item):
+def get_points(item: pytest.Item) -> int:
+    """The point value of a test item (0 unless assigned with @points)."""
     if isinstance(item, pytest.Function):
-        return hasattr(item.function, 'points') and item.function.points > 0
+        return getattr(item.function, 'points', 0)
     elif isinstance(item, pytest.DoctestItem):
-        # For doctests, check if the parent function has points
+        # For doctests, points are assigned to the enclosing function
         func_name = item.dtest.name.split('.')[-1]
-        if hasattr(item.dtest, 'globs') and func_name in item.dtest.globs:
-            func = item.dtest.globs[func_name]
-            return hasattr(func, 'points') and func.points > 0
-    return False
-
-
-def get_points(item: pytest.Item):
-    if isinstance(item, pytest.Function):
-        return item.function.points
-    elif isinstance(item, pytest.DoctestItem):
-        func_name = item.dtest.name.split('.')[-1]
-        if hasattr(item.dtest, 'globs') and func_name in item.dtest.globs:
-            func = item.dtest.globs[func_name]
-            return func.points
+        func = item.dtest.globs.get(func_name)
+        return getattr(func, 'points', 0)
     return 0
 
 
@@ -35,14 +26,13 @@ class ScorerPlugin:
     def __init__(self):
         self.points = {}
         self.test_results = []
-        self.total_points_in_all_tests = 0
 
     def pytest_collection_modifyitems(self, session, config, items):
-        self.total_points_in_all_tests = sum(get_points(f) for f in items if has_points(f))
         # Store points for all items during collection, before any can be skipped
         for item in items:
-            if has_points(item):
-                self.points[item.nodeid] = get_points(item)
+            points = get_points(item)
+            if points > 0:
+                self.points[item.nodeid] = points
 
     def pytest_runtest_logreport(self, report):
         if report.when == "call" or (report.when == "setup" and report.outcome == "skipped"):
@@ -50,42 +40,38 @@ class ScorerPlugin:
 
     def pytest_terminal_summary(self, terminalreporter, exitstatus, config):
         if config.getoption("--score"):
-            self.print_score_report()
+            self.write_score_report(terminalreporter.write_line)
 
-    def print_score_report(self):
+    def write_score_report(self, write_line):
         total_earned = 0
         total_points = 0
 
-        print('═' * 40)
+        write_line('═' * 40)
         for report in self.test_results:
             if report.nodeid in self.points:
-                    points = self.points[report.nodeid]
-                    earned = points if report.outcome == 'passed' else 0
-                    total_points += points
-                    total_earned += earned
-                    test_name = report.nodeid.split("::")[-1]
-                    if report.outcome == 'passed':
-                        emoji = "✅"
-                    elif report.outcome == 'skipped':
-                        emoji = "⏭️"
-                    else:
-                        emoji = "❌"
-                    print(f"  {emoji} {test_name:<25} {earned:>2}/{points} pts")
+                points = self.points[report.nodeid]
+                earned = points if report.outcome == 'passed' else 0
+                total_points += points
+                total_earned += earned
+                test_name = report.nodeid.split("::")[-1]
+                emoji = {'passed': '✅', 'skipped': '⏭️'}.get(report.outcome, '❌')
+                write_line(f"  {emoji} {test_name:<25} {earned:>2}/{points} pts")
 
-        if total_points == self.total_points_in_all_tests:
-            percentage = 0.0 if total_points == 0 else round(100.0 * total_earned / total_points, 1)
-            decoration = ""
-            if total_earned == total_points:
-                percentage = "💯"
-                decoration = "✨"
+        # The total covers only the tests that ran, so a subset run (e.g. -k)
+        # still shows a total for the selected tests.
+        percentage = 0.0 if total_points == 0 else round(100.0 * total_earned / total_points, 1)
+        decoration = ""
+        if total_earned == total_points and total_points > 0:
+            percentage = "💯"
+            decoration = "✨"
 
-            print('─' * 40)
-            print(f"  {decoration}Total Score: {total_earned}/{total_points} pts"
-                  f" ({percentage}%){decoration}")
+        write_line('─' * 40)
+        write_line(f"  {decoration}Total Score: {total_earned}/{total_points} pts"
+                   f" ({percentage}%){decoration}")
 
 
 class UnlockPlugin:
-    def __init__(self, keys: dict[str, str], logger: ProgressLogger | None = None):
+    def __init__(self, keys: dict[str, str], logger: SQLLogger | None = None):
         self.unlock_mode = False
         self.keys = keys
         self.logger = logger
@@ -106,42 +92,41 @@ class UnlockPlugin:
                     capmanager.resume_global_capture()
 
     def pytest_runtest_setup(self, item):
-        if isinstance(item, pytest.DoctestItem) and isinstance(item.dtest, doctest.DocTest):
+        if isinstance(item, pytest.DoctestItem):
             all_unlocked = True
             for example in item.dtest.examples:
-                if 'LOCKED:' in example.want:
-                    all_unlocked = all_unlocked and self._unlock_doctest_output(example)
+                if LOCKED_PREFIX in example.want:
+                    all_unlocked = self._unlock_doctest_output(example) and all_unlocked
+                substitute_function_outputs(example)
 
             if not all_unlocked:
-                test_name = item.dtest.name.split('.')[-1] if hasattr(item.dtest, 'name') else str(item)
+                test_name = item.dtest.name.split('.')[-1]
                 lock_warning = f"{test_name} still has locked examples. To unlock them, run pytest with --unlock."
                 print(lock_warning)
                 pytest.skip(lock_warning)
 
     def _unlock_doctest_output(self, example):
+        """Substitute known unlocked outputs into an example's expected output.
+
+        Return whether every locked line was unlocked."""
         lines = example.want.split('\n')
-        unlocked_lines = []
         all_unlocked = True
 
-        for line in lines:
-            if line.strip().startswith('LOCKED:'):
-                hash_code = line.split('LOCKED:')[1].strip()
-                if hash_code in self.keys:
-                    unlocked_value = self.keys[hash_code]
-                    indent = len(line) - len(line.lstrip())
-                    unlocked_lines.append(' ' * indent + unlocked_value)
-                else:
-                    unlocked_lines.append(line)
-                    all_unlocked = False
+        for i, line in enumerate(lines):
+            hash_code = locked_hash(line)
+            if hash_code is None:
+                continue
+            if hash_code in self.keys:
+                lines[i] = replace_output(line, self.keys[hash_code])
             else:
-                unlocked_lines.append(line)
+                all_unlocked = False
 
-        example.want = '\n'.join(unlocked_lines)
+        example.want = '\n'.join(lines)
         return all_unlocked
 
 
 class LoggerPlugin:
-    def __init__(self, logger: ProgressLogger):
+    def __init__(self, logger: SQLLogger):
         self.logger = logger
 
     def pytest_configure(self, config):
@@ -155,6 +140,60 @@ class LoggerPlugin:
             passed = report.outcome == "passed"
             response = None  # Could be enhanced to capture output/errors
             self.logger.test_case(test_name, passed, response)
+
+
+class IsolationPlugin:
+    """Isolate tests from each other's side effects."""
+
+    def __init__(self, reload_modules: list[str]):
+        self.reload_modules = reload_modules
+
+    def pytest_runtest_setup(self, item):
+        # Reload the modules listed under reload_modules in grader.yaml so that
+        # changes made by one test (e.g. monkeypatching) don't leak into later tests.
+        for name in self.reload_modules:
+            module = sys.modules.get(name)
+            if module is not None:
+                importlib.reload(module)
+
+        # Remove globals injected by pytest's assertion rewriting (@py_builtins,
+        # @pytest_ar) so doctests that introspect their namespace don't see them.
+        if isinstance(item, pytest.DoctestItem):
+            for name in [n for n in item.dtest.globs if n.startswith('@')]:
+                del item.dtest.globs[name]
+
+
+class FirstFailedOnlyPlugin:
+    def __init__(self):
+        self.first_failed_only = False
+        self.failure_shown = False
+
+    def pytest_configure(self, config):
+        self.first_failed_only = config.getoption("--first-failed-only")
+
+    @pytest.hookimpl(wrapper=True)
+    def pytest_runtest_makereport(self, item, call):
+        report = yield
+        if self.first_failed_only and report.when == "call" and report.failed:
+            if self.failure_shown:
+                # Suppress the traceback and captured output of later failures
+                report.longrepr = None
+                report.sections = []
+            else:
+                self.failure_shown = True
+        return report
+
+    def pytest_terminal_summary(self, terminalreporter, exitstatus, config):
+        # Add custom summary when first-failed-only is used
+        failed = len(terminalreporter.stats.get('failed', []))
+        if self.first_failed_only and failed > 1:
+            passed = len(terminalreporter.stats.get('passed', []))
+            skipped = len(terminalreporter.stats.get('skipped', []))
+            terminalreporter.write_line("")
+            terminalreporter.write_line("=" * 70)
+            terminalreporter.write_line("NOTE: --first-failed-only was used. Only the first failed test output was shown.")
+            terminalreporter.write_line(f"Total: {passed} passed, {failed} failed"
+                                        + (f", {skipped} skipped" if skipped > 0 else ""))
 
 
 def pytest_addoption(parser):
@@ -174,16 +213,29 @@ def pytest_addoption(parser):
         "--assignment", action="store", default="grader.yaml",
         help="Assignment configuration file (default: grader.yaml)"
     )
+    parser.addoption(
+        "--first-failed-only", action="store_true", default=False,
+        help="Run all tests but only show output for the first failed test"
+    )
 
 
 def pytest_configure(config):
     # Ensure that skipped tests display a reason
-    config.option.reportchars = 'rs'
+    if 's' not in (config.option.reportchars or ''):
+        config.option.reportchars = (config.option.reportchars or '') + 's'
+
+    if config.getoption("--collect-only"):
+        return  # Nothing runs, so don't create or update the grader database
 
     # Read assignment configuration
     assignment_file = config.getoption("--assignment")
-    with open(assignment_file, 'r') as f:
-        assignment_conf = yaml.safe_load(f)
+    try:
+        with open(assignment_file, 'r') as f:
+            assignment_conf = yaml.safe_load(f) or {}
+    except FileNotFoundError:
+        raise pytest.UsageError(
+            f"pytest-grader could not find the assignment configuration file '{assignment_file}'. "
+            "Run pytest from the assignment directory or pass --assignment.")
     grader_db = config.getoption("--grader-db")
 
     # Store configuration in grader_db
@@ -199,3 +251,6 @@ def pytest_configure(config):
     config.pluginmanager.register(ScorerPlugin(), "pytest-grader-scorer")
     config.pluginmanager.register(UnlockPlugin(unlock_keys, logger), "pytest-grader-unlock")
     config.pluginmanager.register(LoggerPlugin(logger), "pytest-grader-logger")
+    config.pluginmanager.register(IsolationPlugin(assignment_conf.get('reload_modules', [])),
+                                  "pytest-grader-isolation")
+    config.pluginmanager.register(FirstFailedOnlyPlugin(), "pytest-grader-first-failed-only")

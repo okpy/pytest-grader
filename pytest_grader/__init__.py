@@ -1,8 +1,4 @@
-from .cli import cli_main
-from .plugins import *
-from .decorators import *
+"""A pytest plugin for testing and scoring programming assignments."""
 
-
-def main():
-    """CLI entry point for pytest-grader."""
-    cli_main()
+from .decorators import points
+from .plugins import pytest_addoption, pytest_configure

@@ -9,8 +9,16 @@ A pytest plugin for testing and scoring programming assignments.
   - Show a score summary when running `pytest --score`
 - **Test Locking** as described in Basu et al., *Automated Problem Clarification at Scale* ([abstract](https://dl.acm.org/doi/10.1145/2724660.2724679), [pdf](http://denero.org/content/pubs/las15_basu_unlocking.pdf))
   - Lock doctests using the `# LOCK` comment before the function.
-  - `python3 pytest-grader --lock [src] [dest]` will generate a copy of src with doctests locked.
+  - `pytest-grader lock [src] [dst]` will generate a copy of src with doctests locked.
   - `pytest --unlock` provides an interactive interface for unlocking locked doctests.
+  - A doctest whose output is a function should give `FUNCTION` as the expected output,
+    which matches any function value. When unlocking, type `FUNCTION` for such outputs.
+- **Test Isolation**
+  - Modules listed under `reload_modules` in `grader.yaml` are reloaded before each
+    test, so a test that mutates a module (e.g. by monkeypatching one of its
+    functions) does not affect later tests.
+  - Globals injected by pytest's assertion rewriting (`@py_builtins`, `@pytest_ar`)
+    are removed from doctest namespaces.
 - **Progress Logging**
   - Snapshots of assignment files, test case results, and unlocking attempts are stored in a `grader.sqlite`.
   - This file is designed to be submitted along with the assignment as a record of how the assignment was completed.
@@ -19,14 +27,23 @@ A pytest plugin for testing and scoring programming assignments.
 
 Include a `conftest.py` file in the distribution of your assignment that contains `pytest_plugins = ["pytest_grader"]`.
 
+Describe the assignment in a `grader.yaml` file next to it:
+
+```yaml
+included_files:   # Files snapshotted into grader.sqlite when tests run
+  - hog.py
+reload_modules:   # Modules reloaded before each test for isolation
+  - hog
+```
+
 See the `examples` directory for more usage info.
 
 ## License
 
-A permissive license will be chosen shortly...
+[MIT](LICENSE)
 
 ## Updating versions
 
 - Change version in `pyproject.toml`
-- `python -m build`
-- `python -m twine upload dist/*`
+- `uv build`
+- `uv publish`

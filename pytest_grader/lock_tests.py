@@ -5,132 +5,117 @@ Module for locking (and unlocking) doctests by replacing their outputs with secu
 from dataclasses import dataclass
 from pathlib import Path
 
+import ast
 import doctest
 import hashlib
-import importlib.util
 import pytest
-import re
-import types
 
 
-UNLOCK_PREAMBLE = """found locked tests
+LOCK_MARKER = '# LOCK'
+LOCKED_PREFIX = 'LOCKED:'
+FUNCTION_OUTPUT = 'FUNCTION'
 
+UNLOCK_PREAMBLE = """
 === Unlocking Tests ===
 
-At each "? ", type what you would expect the output to be to unlock the test.
+At each "? ", type what you would expect the output to be.
+Type FUNCTION for any function value.
 
-Type FUNCTION for any function value.  Type exit() to stop unlocking tests.
-
-You can also type questions or requests, which will be answered automatically.
-For example: "Explain this expression" or "what's the value of x."
-
+Type exit() to stop unlocking tests.
 """
 
 
-def lock_doctests_for_file(src: Path, dst: Path) -> None:
+def locked_hash(line: str) -> str | None:
+    """Return the hash code of a locked output line, or None if the line is not locked."""
+    text = line.strip()
+    if text.startswith(LOCKED_PREFIX):
+        return text[len(LOCKED_PREFIX):].strip()
+    return None
+
+
+def replace_output(line: str, text: str) -> str:
+    """Replace the content of an output line, preserving its indentation."""
+    indent = len(line) - len(line.lstrip())
+    return ' ' * indent + text
+
+
+def substitute_function_outputs(example: doctest.Example) -> None:
+    """Allow FUNCTION in an expected output to match any function value.
+
+    A doctest whose output is a function should give FUNCTION as the expected
+    output, since a function's repr includes its memory address. Each FUNCTION
+    line is rewritten to `<function ...>` with ellipsis matching enabled."""
+    lines = example.want.split('\n')
+    changed = False
+    for i, line in enumerate(lines):
+        if line.strip() == FUNCTION_OUTPUT:
+            lines[i] = replace_output(line, '<function ...>')
+            changed = True
+    if changed:
+        example.want = '\n'.join(lines)
+        example.options[doctest.ELLIPSIS] = True
+
+
+def lock_doctests_for_file(src: Path, dst: Path) -> int:
     """
-    Write the contents of src to dst with one change: all of the outputs for
-    doctests are replaced by a cryptographic hashcode so that the test cannot
-    be run without the user first verifying the output.
+    Write the contents of src to dst with one change: the outputs of doctests
+    in functions marked with a `# LOCK` comment are replaced by cryptographic
+    hash codes so that the tests cannot be run until the user unlocks them.
+
+    Return the number of outputs that were locked.
     """
-    with open(src, 'r') as f:
-        source_code = f.read()
+    lines = src.read_text().split('\n')
+    marker_indices = set()
+    locked_outputs = 0
 
-    # Import the module to get access to the functions
-    spec = importlib.util.spec_from_file_location("temp_module", src)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    for node in ast.walk(ast.parse('\n'.join(lines), str(src))):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            markers = _find_lock_markers(node, lines)
+            if markers:
+                marker_indices.update(markers)
+                locked_outputs += _lock_docstring_outputs(node, lines)
 
-    modified_code = source_code
+    # Fail loudly on markers that did not attach to any function, rather than
+    # silently writing a file with answers in the clear.
+    strays = [i for i, line in enumerate(lines)
+              if line.strip() == LOCK_MARKER and i not in marker_indices]
+    if strays:
+        raise ValueError(f"{LOCK_MARKER} on line {strays[0] + 1} does not precede a function definition")
 
-    # Find functions that have # LOCK comment before them
-    for name, obj in vars(module).items():
-        if isinstance(obj, types.FunctionType):
-            # Check if there's a # LOCK comment immediately before this function
-            func_pattern = rf'# LOCK\s*\ndef {re.escape(name)}\('
-            if re.search(func_pattern, source_code):
-
-                # Validate that locked function has doctests
-                _validate_locked_function_doctests(obj, name)
-
-                # Extract the original docstring from the source code to preserve formatting
-                func_pattern = rf'def {re.escape(name)}\([^)]*\):\s*"""(.*?)"""'
-                match = re.search(func_pattern, source_code, flags=re.DOTALL)
-
-                if match:
-                    original_docstring = match.group(1)
-                    # Process the original docstring while preserving its formatting
-                    modified_docstring = replace_doctest_outputs(original_docstring, name)
-
-                    # Replace the docstring in the source code
-                    modified_code = modified_code.replace(match.group(0),
-                                                          match.group(0).replace(original_docstring, modified_docstring))
-
-    # Remove # LOCK comment lines and clean up extra blank lines
-    modified_code = re.sub(r'^# LOCK\s*\n', '', modified_code, flags=re.MULTILINE)
-    # Clean up multiple consecutive blank lines
-    modified_code = re.sub(r'\n\n\n+', '\n\n', modified_code)
-
-    # Write the modified code to the destination
-    with open(dst, 'w') as f:
-        f.write(modified_code)
+    dst.write_text('\n'.join(line for i, line in enumerate(lines) if i not in marker_indices))
+    return locked_outputs
 
 
-def _validate_locked_function_doctests(function, function_name):
-    """
-    Validate that a locked function has doctests.
-    Raises ValueError with appropriate error message if validation fails.
-    """
-    if not hasattr(function, '__doc__') or function.__doc__ is None:
-        raise ValueError(f"Locked function '{function_name}' must have a docstring with at least one doctest")
-
-    finder = doctest.DocTestFinder()
-    doctests = finder.find(function)
-
-    # Check if any doctest has examples
-    has_examples = any(len(dt.examples) > 0 for dt in doctests)
-    
-    if not has_examples:
-        raise ValueError(f"Locked function '{function_name}' must have at least one doctest in its docstring")
+def _find_lock_markers(node, lines: list[str]) -> list[int]:
+    """Return the indices of `# LOCK` comment lines attached to a function:
+    the line just above its definition (including any decorators), or a
+    comment line between the decorators and the `def`."""
+    first_line = min([d.lineno for d in node.decorator_list] + [node.lineno])
+    start = max(first_line - 2, 0)  # index of the line above the first decorator
+    return [i for i in range(start, node.lineno - 1) if lines[i].strip() == LOCK_MARKER]
 
 
-def replace_doctest_outputs(docstring: str, func_name: str) -> str:
-    """Replace doctest outputs with hash codes in a docstring."""
-    lines = docstring.split('\n')
-    result_lines = []
-    line_idx = 0
+def _lock_docstring_outputs(node, lines: list[str]) -> int:
+    """Replace the doctest outputs in a function's docstring with hash codes,
+    editing lines in place. Return the number of outputs locked."""
+    docstring = ast.get_docstring(node, clean=False)
+    if docstring is None:
+        raise ValueError(f"Locked function '{node.name}' must have a docstring with at least one doctest")
+    examples = doctest.DocTestParser().get_examples(docstring)
+    if not examples:
+        raise ValueError(f"Locked function '{node.name}' must have at least one doctest in its docstring")
+
+    # Line i of the docstring appears on line docstring_start + i of the file (1-indexed).
+    docstring_start = node.body[0].lineno
     output_number = 0
-
-    while line_idx < len(lines):
-        line = lines[line_idx]
-        result_lines.append(line)
-
-        # Check if this line is a doctest command
-        if line.strip().startswith('>>> '):
-            line_idx += 1
-            # Skip any continuation lines (...)
-            while line_idx < len(lines) and lines[line_idx].strip().startswith('... '):
-                result_lines.append(lines[line_idx])
-                line_idx += 1
-
-            # Now look for the expected output lines
-            while line_idx < len(lines):
-                line = lines[line_idx]
-                # If we hit another >>> or empty line, stop
-                if (line.strip().startswith('>>> ') or not line.strip()):
-                    break
-                if line.strip():
-                    expected_output = line.strip()
-                    indent = len(line) - len(line.lstrip())
-                    pos = OutputPosition(testname=func_name, output_number=output_number)
-                    hash_code = pos.encode(expected_output)
-                    result_lines.append(' ' * indent + f"LOCKED: {hash_code}")
-                    output_number += 1
-                    line_idx += 1
-        else:
-            line_idx += 1
-
-    return '\n'.join(result_lines)
+    for example in examples:
+        first_want = docstring_start + example.lineno + example.source.count('\n')
+        for file_line in range(first_want, first_want + example.want.count('\n')):
+            line = lines[file_line - 1]
+            hash_code = OutputPosition(node.name, output_number).encode(line.strip())
+            lines[file_line - 1] = replace_output(line, f'{LOCKED_PREFIX} {hash_code}')
+            output_number += 1
+    return output_number
 
 
 @dataclass
@@ -146,14 +131,16 @@ class OutputPosition:
 
 
 def run_unlock_interactive(items: list[pytest.Item], keys: dict[str, str], logger=None):
-    """Collect all LOCKED outputs of doctests among Pytest test items."""
+    """Interactively unlock all LOCKED outputs of doctests among Pytest test items."""
+    locked_items = [item for item in items if isinstance(item, pytest.DoctestItem)
+                    and any(LOCKED_PREFIX in example.want for example in item.dtest.examples)]
+    if not locked_items:
+        print("No locked tests found.")
+        return
     print(UNLOCK_PREAMBLE)
-    for item in items:
-        if isinstance(item, pytest.DoctestItem) and isinstance(item.dtest, doctest.DocTest):
-            if any("LOCKED:" in example.want for example in item.dtest.examples):
-                success = unlock_doctest(item.dtest, keys, logger)
-                if not success:
-                    return
+    for item in locked_items:
+        if not unlock_doctest(item.dtest, keys, logger):
+            return
     print("=== 🎉 All tests unlocked! 🎉 ===")
 
 
@@ -166,8 +153,8 @@ def unlock_doctest(dtest: doctest.DocTest, keys: dict[str, str], logger=None):
         print(">>>", example.source, end="")
         output_lines = [s for s in example.want.split('\n') if s.strip()]
         for k, line in enumerate(output_lines):
-            if line.strip().startswith('LOCKED:'):
-                expected_hash = line.split('LOCKED:')[1].strip()
+            expected_hash = locked_hash(line)
+            if expected_hash:
                 if output := keys.get(expected_hash):
                     print(output)
                 else:
@@ -176,7 +163,7 @@ def unlock_doctest(dtest: doctest.DocTest, keys: dict[str, str], logger=None):
                     if len(output_lines) > 1:
                         prompt = f"(line {k+1} of {len(output_lines)}) ?"
                     output_str = unlock_output(example, position, expected_hash, prompt, logger)
-                    if not output_str:  # User chose to exit
+                    if output_str is None:  # User chose to exit
                         return False
                     keys[expected_hash] = output_str
                     # Log the successful unlock attempt
@@ -187,7 +174,7 @@ def unlock_doctest(dtest: doctest.DocTest, keys: dict[str, str], logger=None):
 
 
 def unlock_output(example, output_pos, expected_hash, prompt, logger=None):
-    """Interactively unlock a single output."""
+    """Interactively unlock a single output. Return the output, or None to exit."""
     while True:
         try:
             user_input = input(f"{prompt} ").strip()
@@ -208,9 +195,8 @@ def unlock_output(example, output_pos, expected_hash, prompt, logger=None):
                 print()
         except (EOFError, KeyboardInterrupt):
             print("\nExiting unlock mode.")
-            return False
+            return None
 
 
 def respond_to_incorrect_input(example, output_pos, user_input):
     print("-- Not quite. Try again! --")
-

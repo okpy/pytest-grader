@@ -2,30 +2,14 @@
 Logging that tracks a student's progress through an assignment.
 """
 
-from abc import ABC, abstractmethod
 import sqlite3
 import hashlib
 import os
-from datetime import datetime
 
 
-class ProgressLogger(ABC):
-    """Logs progress through an assignment."""
+class SQLLogger:
+    """Logs progress through an assignment to a SQLite database."""
 
-    @abstractmethod
-    def snapshot(self):
-        """Store assignment code used for this test."""
-
-    @abstractmethod
-    def test_case(self, name, passed: bool, response: str | None = None):
-        """Store the AI response and result of a test case."""
-
-    @abstractmethod
-    def unlock_attempt(self, name, output_number, guess, success: bool, response: str | None = None):
-        """Store the AI response and result of an attempt to unlock a test case."""
-
-
-class SQLLogger(ProgressLogger):
     def __init__(self, db: str, conf: dict[str, str]):
         self.db_path = db
         self.conf = conf
@@ -92,12 +76,9 @@ class SQLLogger(ProgressLogger):
 
         self.conn.commit()
 
-    def _execute_and_commit(self, query, params=None):
+    def _execute_and_commit(self, query, params=()):
         """Execute a query and commit the transaction."""
-        if params:
-            self.cursor.execute(query, params)
-        else:
-            self.cursor.execute(query)
+        self.cursor.execute(query, params)
         self.conn.commit()
 
     def snapshot(self):
