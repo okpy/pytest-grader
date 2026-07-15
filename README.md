@@ -47,3 +47,4 @@ See the `examples` directory for more usage info.
 - Change version in `pyproject.toml`
 - `uv build`
 - `uv publish`
+If your pypi credentials are in `~/.pypirc`, then instead run `uvx uv-publish`.
