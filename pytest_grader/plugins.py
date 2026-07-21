@@ -46,7 +46,7 @@ class ScorerPlugin:
         total_earned = 0
         total_points = 0
 
-        write_line('═' * 40)
+        rows = []
         for report in self.test_results:
             if report.nodeid in self.points:
                 points = self.points[report.nodeid]
@@ -55,7 +55,19 @@ class ScorerPlugin:
                 total_earned += earned
                 test_name = report.nodeid.split("::")[-1]
                 emoji = {'passed': '✅', 'skipped': '⏭️'}.get(report.outcome, '❌')
-                write_line(f"  {emoji} {test_name:<25} {earned:>2}/{points} pts")
+                rows.append((emoji, test_name, str(earned), str(points)))
+
+        # Pad each column to its widest entry so that all the / marks line up.
+        name_width = max((len(row[1]) for row in rows), default=0)
+        earned_width = max((len(row[2]) for row in rows), default=0)
+        points_width = max((len(row[3]) for row in rows), default=0)
+        # Two leading spaces, a double-width emoji, and a space precede the name.
+        rule_width = max(40, 5 + name_width + 2 + earned_width + 1 + points_width)
+
+        write_line('═' * rule_width)
+        for emoji, test_name, earned, points in rows:
+            write_line(f"  {emoji} {test_name:<{name_width}}  "
+                       f"{earned:>{earned_width}}/{points:<{points_width}}")
 
         # The total covers only the tests that ran, so a subset run (e.g. -k)
         # still shows a total for the selected tests.
@@ -65,8 +77,8 @@ class ScorerPlugin:
             percentage = "💯"
             decoration = "✨"
 
-        write_line('─' * 40)
-        write_line(f"  {decoration}Total Score: {total_earned}/{total_points} pts"
+        write_line('─' * rule_width)
+        write_line(f"  {decoration}Total Score: {total_earned}/{total_points}"
                    f" ({percentage}%){decoration}")
 
 
