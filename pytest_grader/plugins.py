@@ -91,6 +91,9 @@ class UnlockPlugin:
     def pytest_configure(self, config):
         self.unlock_mode = config.getoption("--unlock")
 
+    # trylast so that this runs after the hooks that deselect items for -k, -m,
+    # and --deselect; otherwise items still holds every collected test.
+    @pytest.hookimpl(trylast=True)
     def pytest_collection_modifyitems(self, session, config, items):
         if self.unlock_mode:
             # Temporarily disable pytest's output capturing for interactive input
